@@ -3472,11 +3472,11 @@ fn regression_test_195() {
     let original = r##"> [!Note]
 > - Foo
 "##;
-    let expected = r##"<blockquote class="markdown-alert-note">
+    let expected = r##"<div role="note" class="markdown-alert-note">
 <ul>
 <li>Foo</li>
 </ul>
-</blockquote>
+</div>
 "##;
 
     let mut opts = default_test_opts();
