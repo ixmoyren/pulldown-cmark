@@ -7,13 +7,13 @@ edition = "2018"
 
 [dependencies]
 syn = { version = "2", features = ["full", "visit"] }
-itertools = "0.10"
+itertools = "0.14.0"
 walkdir = "2.5"
 pulldown-cmark = { path = "../pulldown-cmark" }
-ndarray = "0.15"
-ndarray-stats = "0.5"
-rand = "0.8"
-rand_xoshiro = "0.6"
+ndarray = "0.17.2"
+ndarray-stats = "0.7.0"
+rand = "0.10.1"
+rand_xoshiro = "0.8.0"
 num_cpus = "1.16"
 crossbeam-utils = "0.8"
 libc = "0.2"

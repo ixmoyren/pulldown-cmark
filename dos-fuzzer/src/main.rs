@@ -47,13 +47,11 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
-use clap;
 use crossbeam_utils::thread;
 use pulldown_cmark::{Options, Parser};
-use rand::{distributions::Distribution, seq::SliceRandom, Rng, SeedableRng};
+use rand::{distr::Distribution, seq::IndexedRandom, Rng, SeedableRng};
 use rand_xoshiro::Xoshiro256Plus;
 use serde::{Deserialize, Serialize};
-use serde_json;
 
 mod black_box;
 mod clock;
@@ -157,12 +155,11 @@ fn main() {
     } = clap::Parser::parse();
 
     if retest {
-        for pattern in io::stdin().lock().lines().flatten() {
+        for pattern in io::stdin().lock().lines().map_while(Result::ok) {
             println!("Retesting: {}", &pattern);
             let pattern = serde_json::from_str(&pattern).expect("Couldn't deserialize pattern");
-            match test_catch_unwind(&pattern) {
-                Ok(res) => println!("score: {}", res.score()),
-                Err(()) => (),
+            if let Ok(res) = test_catch_unwind(&pattern) {
+                println!("score: {}", res.score())
             }
         }
     } else if regressions {
@@ -238,7 +235,7 @@ fn fuzz(num_cpus: usize) {
 
     let num_batches_finished = AtomicU64::new(0);
     let num_batches_finished = &num_batches_finished;
-    let mut rng = Xoshiro256Plus::from_rng(&mut rand::thread_rng()).unwrap();
+    let mut rng = Xoshiro256Plus::from_rng(&mut rand::rng());
     let start_time = Instant::now();
     let mut pattern_times = Vec::with_capacity(num_cpus);
     for _ in 0..num_cpus {
@@ -289,7 +286,7 @@ fn fuzz(num_cpus: usize) {
                 let patterns_finished = batches_finished * BATCH_SIZE as u64;
                 let elapsed_secs = start_time.elapsed().as_secs();
 
-                // if for some reason we are super-fast, we must avoid div-by-zero
+                // if for some reason we are superfast, we must avoid div-by-zero
                 if batches_finished != prev_batches && elapsed_secs > 0 && patterns_finished > 0 {
                     println!(
                         "Tested patterns: {}\t\tThroughput: {} patterns / s",

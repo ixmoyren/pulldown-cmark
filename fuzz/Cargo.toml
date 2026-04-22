@@ -9,21 +9,20 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
-anyhow = "1.0.71"
+anyhow = "1"
 libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
-once_cell = "1.18.0"
-pretty_assertions = "1.3.0"
-quick-xml = "0.29"
-mozjs = { git = "https://github.com/servo/mozjs", rev = "d90edd169aae1e16c1ef8b7bd4b2e0d93dda8ba2", features = [
-  "streams",
-] }
+pretty_assertions = "1.4.1"
+quick-xml = "0.39.2"
+boa_engine = { git = "https://github.com/boa-dev/boa.git" }
+boa_runtime = { git = "https://github.com/boa-dev/boa.git", default-features = false }
+boa_parser = { git = "https://github.com/boa-dev/boa.git" }
 urlencoding = "2.1.2"
 
 [dependencies.pulldown-cmark]
 path = "../pulldown-cmark"
 
 [features]
-simd = [ "pulldown-cmark/simd" ]
+simd = ["pulldown-cmark/simd"]
 
 [[bin]]
 name = "parse"

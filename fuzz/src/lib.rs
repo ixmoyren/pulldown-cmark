@@ -1,22 +1,20 @@
 //! Fuzzin helper functions.
 
-use std::convert::TryInto;
-use std::ptr;
-
-use anyhow::anyhow;
-use mozjs::conversions::ToJSValConvertible;
-use mozjs::jsapi::{
-    EnterRealm, HandleValueArray, JS_NewGlobalObject, LeaveRealm, OnNewGlobalHookOption,
-};
-use mozjs::jsval::UndefinedValue;
-use mozjs::rooted;
-use mozjs::rust::wrappers::JS_CallFunctionName;
-use mozjs::rust::SIMPLE_GLOBAL_CLASS;
-use mozjs::rust::{JSEngine, RealmOptions, Runtime};
+use anyhow::{anyhow, bail};
+use boa_engine::builtins::promise::PromiseState;
+use boa_engine::module::MapModuleLoader;
+use boa_engine::object::builtins::JsFunction;
+use boa_engine::property::Attribute;
+use boa_engine::{js_string, Context as BoaEngineContext, JsError, JsNativeError, JsValue, Module};
+use boa_parser::Source;
+use boa_runtime::Console;
 use pulldown_cmark::{CodeBlockKind, Event, LinkType, Parser, Tag, TagEnd};
 use quick_xml::escape::unescape;
 use quick_xml::events::Event as XmlEvent;
 use quick_xml::reader::Reader;
+use std::cell::RefCell;
+use std::convert::TryInto;
+use std::rc::Rc;
 
 fn urldecode(data: &str) -> String {
     let decoded = urlencoding::decode_binary(data.as_bytes());
@@ -31,84 +29,82 @@ pub fn pulldown_cmark(text: &str) -> Vec<Event<'_>> {
 
 /// Send Markdown `text` to `commonmark.js` and return XML.
 pub fn commonmark_js(text: &str) -> anyhow::Result<String> {
-    const COMMONMARK_MIN_JS: &str =
-        include_str!("../../pulldown-cmark/third_party/commonmark.js/commonmark.min.js");
-
     thread_local! {
-        static ENGINE: JSEngine = {
-            JSEngine::init().expect("failed to initalize JS engine")
+        static CONTEXT_RENDER_TO_XML: (RefCell<BoaEngineContext>, JsFunction) = {
+            let loader = Rc::new(MapModuleLoader::new());
+            let mut context = BoaEngineContext::builder().module_loader(loader.clone()).build()
+                .expect("the context didn't exist");
+            add_console(&mut context);
+            let commonmark = commonmark_mjs(&mut context);
+            let _ = loader.insert("/commonmark.js", commonmark);
+            let main_js = main_mjs(&mut context);
+            let promise = main_js.load_link_evaluate(&mut context);
+            context.run_jobs().expect("the main.mjs didn't execute!");
+            match promise.state() {
+                PromiseState::Pending => panic!("module didn't execute!"),
+                PromiseState::Fulfilled(v) => {
+                    assert_eq!(v, JsValue::undefined());
+                    let namespace = main_js.namespace(&mut context);
+                    let render_to_xml = namespace.get(js_string!("renderToXml"), &mut context)
+                        .expect("failed to get renderToXml from namespace")
+                        .as_function()
+                        .ok_or_else(|| {
+                            JsNativeError::typ().with_message("renderToXml export wasn't a function!")
+                        })
+                        .expect("failed to renderToX obj to func");
+                    (RefCell::new(context), render_to_xml)
+                }
+                PromiseState::Rejected(err) => {
+                    let js_error = JsError::from_opaque(err).try_native(&mut context)
+                    .expect("failed to get js native error");
+                    panic!("{:?}", js_error);
+                }
+            }
         }
     }
+    let markdown = js_string!(text);
+    let result = CONTEXT_RENDER_TO_XML.with(|(context, rander_to_xml)| {
+        let mut context = context.borrow_mut();
+        rander_to_xml.call(&JsValue::undefined(), &[markdown.into()], &mut context)
+    });
+    match result {
+        Ok(js_value) => js_value
+            .as_string()
+            .ok_or(anyhow!("no xml string"))
+            .map(|v| v.to_std_string_lossy()),
+        Err(error) => bail!(
+            "failed to markdown to xml from commonmark.js, error is {:?}",
+            error
+        ),
+    }
+}
 
-    ENGINE.with(|engine| {
-        let rt = Runtime::new(engine.handle());
+fn add_console(context: &mut BoaEngineContext) {
+    let console = Console::init(context);
+    context
+        .register_global_property(Console::NAME, console, Attribute::all())
+        .expect("the console builtin shouldn't exist");
+}
 
-        let options = RealmOptions::default();
-        rooted!(in(rt.cx()) let global = unsafe {
-            JS_NewGlobalObject(rt.cx(), &SIMPLE_GLOBAL_CLASS, ptr::null_mut(),
-                                OnNewGlobalHookOption::FireOnNewGlobalHook,
-                                &*options)
-        });
-        let realm = unsafe { EnterRealm(rt.cx(), global.get()) };
+fn commonmark_mjs(context: &mut BoaEngineContext) -> Module {
+    const SRC: &[u8] =
+        include_bytes!("../../pulldown-cmark/third_party/commonmark.js/commonmark.min.js");
+    let source = Source::from_bytes(SRC);
+    Module::parse(source, None, context).expect("the commonmark.mjs didn't parse!")
+}
 
-        // The return value comes back here. If it could be a GC thing, you must add it to the
-        // GC's "root set" with the rooted! macro.
-        rooted!(in(rt.cx()) let mut rval = UndefinedValue());
+fn main_mjs(context: &mut BoaEngineContext) -> Module {
+    const SRC: &str = r#"
+        import {XmlRenderer, Parser} from "/commonmark.js";
 
-        // These should indicate source location for diagnostics.
-        let filename: &'static str = "commonmark.min.js";
-        let lineno: u32 = 1;
-        let res = rt.evaluate_script(
-            global.handle(),
-            COMMONMARK_MIN_JS,
-            filename,
-            lineno,
-            rval.handle_mut(),
-        );
-        assert!(res.is_ok());
-
-        let filename: &'static str = "{inline}";
-        let lineno: u32 = 1;
-        let script = r#"
-            function render_to_xml(markdown) {
-                var reader = new commonmark.Parser();
-                var xmlwriter = new commonmark.XmlRenderer({ sourcepos: false });
-                return xmlwriter.render(reader.parse(markdown));
-            }
-        "#;
-        rooted!(in(rt.cx()) let mut render_to_xml = UndefinedValue());
-        let res = rt.evaluate_script(
-            global.handle(),
-            script,
-            filename,
-            lineno,
-            render_to_xml.handle_mut(),
-        );
-        assert!(res.is_ok());
-
-        // rval now contains a reference to the render_to_xml function
-        let xml = unsafe {
-            rooted!(in(rt.cx()) let mut xml = UndefinedValue());
-            rooted!(in(rt.cx()) let mut text_val = UndefinedValue());
-            text.to_jsval(rt.cx(), text_val.handle_mut());
-            JS_CallFunctionName(
-                rt.cx(),
-                global.handle(),
-                b"render_to_xml\0".as_ptr() as *const i8,
-                &HandleValueArray::from_rooted_slice(&[text_val.handle().get()]),
-                xml.handle_mut(),
-            );
-            let xml_string = xml.handle().to_string();
-            let utf8 = mozjs::conversions::jsstr_to_string(rt.cx(), xml_string);
-            utf8
-        };
-
-        unsafe {
-            LeaveRealm(rt.cx(), realm);
+        export function renderToXml(markdown) {
+            const reader = new Parser();
+            const xmlWriter = new XmlRenderer({sourcepos: false});
+            return xmlWriter.render(reader.parse(markdown));
         }
-
-        Ok(xml)
-    })
+    "#;
+    let source = Source::from_bytes(SRC.as_bytes());
+    Module::parse(source, None, context).expect("the main.mjs didn't parse!")
 }
 
 /// Parse commonmark.js XML and return Markdown events.
