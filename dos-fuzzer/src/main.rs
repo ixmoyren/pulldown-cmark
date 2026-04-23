@@ -252,7 +252,7 @@ fn fuzz(num_cpus: usize) {
                 let rng = rng.clone();
                 let pattern_time = &pattern_times[i];
                 s.spawn(move |_| {
-                    worker_thread_fn(literals, &num_batches_finished, rng, pattern_time)
+                    worker_thread_fn(literals, num_batches_finished, rng, pattern_time)
                 })
             })
             .collect();
@@ -463,7 +463,7 @@ fn sample_pattern(
     let target_repeat_bytes = target_byte_count - buf.len() - pattern.suffix.len();
     let num_repeats = target_repeat_bytes / pattern.repeating_pattern.len();
 
-    buf.extend(std::iter::repeat(&pattern.repeating_pattern[..]).take(num_repeats));
+    buf.extend(iter::repeat_n(&pattern.repeating_pattern[..], num_repeats));
     buf.push_str(&pattern.suffix);
     num_repeats
 }

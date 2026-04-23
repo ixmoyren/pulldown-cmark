@@ -16,7 +16,7 @@ use walkdir::WalkDir;
 /// Additionally, it manually adds some literals for uncovered edge-cases.
 pub fn get() -> Vec<Vec<u8>> {
     // Get relevant literals from pulldown-cmark's source code.
-    // See documentaiton of `literals`-module for more information.
+    // See documentation of `literals`-module for more information.
     let walkdir = WalkDir::new("../pulldown-cmark/src")
         .into_iter()
         .filter_map(|e| e.ok())
@@ -85,13 +85,74 @@ impl LiteralParser {
 
     pub fn extract_literals_from_file<P: AsRef<Path>>(&mut self, path: P) {
         let path = path.as_ref();
-        let content = fs::read_to_string(path).expect(&format!("unable to read file {:?}", path));
-        let parsed = syn::parse_file(&content).expect(&format!("unable to parse file {:?}", path));
+        let content =
+            fs::read_to_string(path).unwrap_or_else(|_| panic!("unable to read file {:?}", path));
+        let parsed =
+            syn::parse_file(&content).unwrap_or_else(|_| panic!("unable to parse file {:?}", path));
         self.visit_file(&parsed);
     }
 }
 
 impl<'ast> Visit<'ast> for LiteralParser {
+    fn visit_arm(&mut self, arm: &'ast syn::Arm) {
+        self.visit_pat(&arm.pat);
+        self.condition_depth += 1;
+        if let Some((_, guard)) = &arm.guard {
+            self.visit_expr(guard);
+        }
+        self.condition_depth -= 1;
+        self.visit_expr(&*arm.body);
+    }
+
+    fn visit_attribute(&mut self, _attr: &'ast syn::Attribute) {
+        // Ignore attributes, e.g. doc comments
+    }
+
+    fn visit_expr_for_loop(&mut self, expr: &'ast syn::ExprForLoop) {
+        self.condition_depth += 1;
+        self.visit_expr(&*expr.expr);
+        self.condition_depth -= 1;
+        self.visit_block(&expr.body);
+    }
+
+    fn visit_expr_if(&mut self, expr: &'ast syn::ExprIf) {
+        self.condition_depth += 1;
+        self.visit_expr(&*expr.cond);
+        self.condition_depth -= 1;
+        self.visit_block(&expr.then_branch);
+        if let Some((_, branch)) = &expr.else_branch {
+            self.visit_expr(&*branch);
+        }
+    }
+
+    fn visit_expr_match(&mut self, expr: &'ast syn::ExprMatch) {
+        self.condition_depth += 1;
+        self.visit_expr(&*expr.expr);
+        self.condition_depth -= 1;
+        for it in &expr.arms {
+            self.visit_arm(it);
+        }
+    }
+
+    fn visit_expr_while(&mut self, expr: &'ast syn::ExprWhile) {
+        self.condition_depth += 1;
+        self.visit_expr(&*expr.cond);
+        self.condition_depth -= 1;
+        self.visit_block(&expr.body);
+    }
+
+    fn visit_item_const(&mut self, item: &'ast syn::ItemConst) {
+        self.in_const = true;
+        syn::visit::visit_item_const(self, item);
+        self.in_const = false;
+    }
+
+    fn visit_item_static(&mut self, item: &'ast syn::ItemStatic) {
+        self.in_static = true;
+        syn::visit::visit_item_static(self, item);
+        self.in_static = false;
+    }
+
     fn visit_lit(&mut self, lit: &'ast Lit) {
         if self.condition_depth == 0 && !self.in_static && !self.in_const {
             return;
@@ -111,69 +172,10 @@ impl<'ast> Visit<'ast> for LiteralParser {
         }
     }
 
-    fn visit_item_static(&mut self, item: &'ast syn::ItemStatic) {
-        self.in_static = true;
-        syn::visit::visit_item_static(self, item);
-        self.in_static = false;
-    }
-
-    fn visit_item_const(&mut self, item: &'ast syn::ItemConst) {
-        self.in_const = true;
-        syn::visit::visit_item_const(self, item);
-        self.in_const = false;
-    }
-
-    fn visit_expr_if(&mut self, expr: &'ast syn::ExprIf) {
-        self.condition_depth += 1;
-        self.visit_expr(&*expr.cond);
-        self.condition_depth -= 1;
-        self.visit_block(&expr.then_branch);
-        if let Some((_, branch)) = &expr.else_branch {
-            self.visit_expr(&*branch);
-        }
-    }
-
-    fn visit_expr_while(&mut self, expr: &'ast syn::ExprWhile) {
-        self.condition_depth += 1;
-        self.visit_expr(&*expr.cond);
-        self.condition_depth -= 1;
-        self.visit_block(&expr.body);
-    }
-
-    fn visit_expr_for_loop(&mut self, expr: &'ast syn::ExprForLoop) {
-        self.condition_depth += 1;
-        self.visit_expr(&*expr.expr);
-        self.condition_depth -= 1;
-        self.visit_block(&expr.body);
-    }
-
-    fn visit_expr_match(&mut self, expr: &'ast syn::ExprMatch) {
-        self.condition_depth += 1;
-        self.visit_expr(&*expr.expr);
-        self.condition_depth -= 1;
-        for it in &expr.arms {
-            self.visit_arm(it);
-        }
-    }
-
-    fn visit_arm(&mut self, arm: &'ast syn::Arm) {
-        self.visit_pat(&arm.pat);
-        self.condition_depth += 1;
-        if let Some((_, guard)) = &arm.guard {
-            self.visit_expr(guard);
-        }
-        self.condition_depth -= 1;
-        self.visit_expr(&*arm.body);
-    }
-
     fn visit_pat(&mut self, pat: &'ast syn::Pat) {
         // Covers let-else patterns etc.
         self.condition_depth += 1;
         syn::visit::visit_pat(self, pat);
         self.condition_depth -= 1;
-    }
-
-    fn visit_attribute(&mut self, _attr: &'ast syn::Attribute) {
-        // Ignore attributes, e.g. doc comments
     }
 }

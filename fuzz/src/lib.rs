@@ -175,10 +175,7 @@ pub fn xml_to_events(xml: &str) -> anyhow::Result<Vec<Event<'_>>> {
                         )))),
                         None => events.push(Event::Start(Tag::List(None))),
                     };
-                    let tight = match tag.try_get_attribute("tight") {
-                        Ok(Some(value)) if value.unescape_value()? == "true" => true,
-                        _ => false,
-                    };
+                    let tight = matches!(tag.try_get_attribute("tight"), Ok(Some(value)) if value.unescape_value()? == "true");
                     block_container_stack.push((start.is_some(), tight));
                 }
                 b"item" => events.push(Event::Start(Tag::Item)),
