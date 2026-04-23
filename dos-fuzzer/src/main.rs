@@ -38,6 +38,7 @@
 use std::env;
 use std::io::{self, BufRead};
 use std::iter;
+use std::num::NonZero;
 use std::os::unix::process::CommandExt;
 use std::panic;
 use std::process::Command;
@@ -161,7 +162,12 @@ fn main() {
         }
     };
 
-    let num_cpus = (num_cpus::get() as f32 * 0.8).ceil() as usize;
+    let num_cpus = (std::thread::available_parallelism()
+        .ok()
+        .map(NonZero::get)
+        .unwrap_or(1_usize) as f32
+        * 0.8)
+        .ceil() as usize;
 
     if matches.opt_present("retest") {
         for pattern in io::stdin().lock().lines().map_while(Result::ok) {
