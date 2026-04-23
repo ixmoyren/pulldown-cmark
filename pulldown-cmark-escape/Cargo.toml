@@ -10,8 +10,8 @@ description = "An escape library for HTML created in the pulldown-cmark project"
 repository = "https://github.com/raphlinus/pulldown-cmark"
 keywords = ["escape", "html", "markdown", "commonmark"]
 categories = ["text-processing"]
-edition = "2021"
-rust-version = "1.70" # Update README.md and GitHub action when changing this
+edition.workspace = true
+rust-version.workspace = true # Update README.md and GitHub action when changing this
 readme = "./README.md"
 
 [features]

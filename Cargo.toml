@@ -1,13 +1,17 @@
 [workspace]
 default-members = ["pulldown-cmark", "pulldown-cmark-escape"]
 members = [
-  "bench",
-  "dos-fuzzer",
-  "fuzz",
-  "pulldown-cmark",
-  "pulldown-cmark-escape",
+    "bench",
+    "dos-fuzzer",
+    "fuzz",
+    "pulldown-cmark",
+    "pulldown-cmark-escape",
 ]
 resolver = "2"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85.0"
 
 [profile.release]
 lto = true

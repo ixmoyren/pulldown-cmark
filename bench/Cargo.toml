@@ -2,7 +2,8 @@
 name = "pulldown-cmark-bench"
 publish = false
 version = "0.0.0"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
 
 [[bench]]
 name = "html_rendering"
