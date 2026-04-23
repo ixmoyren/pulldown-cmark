@@ -1,10 +1,10 @@
-use pulldown_cmark::{html, Options, Parser};
+use pulldown_cmark::{Options, Parser, html};
 
 fn main() {
     let markdown_input: &str = "Hello world, this is a ~~complicated~~ *very simple* example.";
     println!("Parsing the following markdown string:\n{}", markdown_input);
 
-    // Set up options and parser. Strikethroughs are not part of the CommonMark standard
+    // Set up options and parser. Strikethrough are not part of the CommonMark standard
     // and we therefore must enable it explicitly.
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);

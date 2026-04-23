@@ -84,7 +84,6 @@
 
 #[macro_use]
 extern crate alloc;
-
 #[cfg(feature = "std")]
 extern crate std;
 
@@ -450,7 +449,7 @@ pub enum TagEnd {
 /// Make sure `TagEnd` is no more than two bytes in size.
 /// This is why it's used instead of just using `Tag`.
 #[cfg(target_pointer_width = "64")]
-const _STATIC_ASSERT_TAG_END_SIZE: [(); 2] = [(); core::mem::size_of::<TagEnd>()];
+const _STATIC_ASSERT_TAG_END_SIZE: [(); 2] = [(); size_of::<TagEnd>()];
 
 impl<'a> From<Tag<'a>> for TagEnd {
     fn from(value: Tag) -> Self {
@@ -665,7 +664,6 @@ impl<'a> Event<'a> {
 /// Table column text alignment.
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-
 pub enum Alignment {
     /// Default text alignment.
     None,

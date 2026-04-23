@@ -1,6 +1,6 @@
 use std::io::Write as _;
 
-use pulldown_cmark::{html, Event, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd, html};
 
 fn main() {
     let markdown_input: &str = "This is Peter on ![holiday in Greece](pearl_beach.jpg).";
@@ -13,9 +13,11 @@ fn main() {
             Event::Text(text) => Event::Text(text.replace("Peter", "John").into()),
             _ => event,
         })
-        .filter(|event| match event {
-            Event::Start(Tag::Image { .. }) | Event::End(TagEnd::Image) => false,
-            _ => true,
+        .filter(|event| {
+            !matches!(
+                event,
+                Event::Start(Tag::Image { .. }) | Event::End(TagEnd::Image)
+            )
         });
 
     // Write to anything implementing the `Write` trait. This could also be a file
