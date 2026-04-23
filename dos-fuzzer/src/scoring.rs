@@ -54,7 +54,7 @@ pub fn slope_stddev(time_samples: &[(f64, f64)]) -> (f64, bool) {
 
     let slopes = &mut slopes[..i];
 
-    if super::DEBUG_LEVEL >= 2 {
+    if *(super::DEBUG_LEVEL) >= 2 {
         println!("slopes: {:?}", slopes);
     }
 
@@ -85,7 +85,7 @@ mod test {
         let test_result = slope_stddev(&vec);
 
         println!("Score = {}", test_result.0);
-        assert!(test_result.1 == false);
+        assert!(!test_result.1);
     }
 
     #[test]
@@ -100,7 +100,7 @@ mod test {
         let test_result = slope_stddev(&vec);
 
         println!("Score = {}", test_result.0);
-        assert!(test_result.1 == false);
+        assert!(!test_result.1);
     }
 
     #[test]
@@ -115,7 +115,7 @@ mod test {
         let test_result = slope_stddev(&vec);
 
         println!("Score = {}", test_result.0);
-        assert!(test_result.1 == true);
+        assert!(test_result.1);
     }
 
     #[test]
@@ -131,6 +131,6 @@ mod test {
         let test_result = slope_stddev(&vec);
 
         println!("Score = {}", test_result.0);
-        assert!(test_result.1 == true);
+        assert!(test_result.1);
     }
 }

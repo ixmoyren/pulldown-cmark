@@ -43,7 +43,7 @@ use std::panic;
 use std::process::Command;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    Mutex,
+    LazyLock, Mutex,
 };
 use std::time::{Duration, Instant};
 
@@ -85,7 +85,17 @@ const ACCEPTANCE_CORRELATION: f64 = 0.995;
 /// Number of times we test until we are convinced of superlinear behavior
 const TEST_COUNT: usize = 5;
 /// 0 / 1 / 2 / 3
-const DEBUG_LEVEL: u8 = 0;
+static DEBUG_LEVEL: LazyLock<u8> = LazyLock::new(|| {
+    env::var("DEBUG_LEVEL")
+        .ok()
+        .map(|s| {
+            s.parse::<u8>().unwrap_or_else(|e| {
+                eprint!("Couldn't parse debug level, error is {e:?}");
+                0_u8
+            })
+        })
+        .unwrap_or(0_u8)
+});
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 struct Pattern {
@@ -423,7 +433,7 @@ fn test_pattern(pattern: &Pattern, time_samples: &mut [(f64, f64)]) -> PatternRe
         let dur = time_needed(&buf);
         time_samples[i] = (n as f64, dur.as_nanos() as f64);
 
-        if DEBUG_LEVEL >= 3 {
+        if *DEBUG_LEVEL >= 3 {
             println!("duration: {}", dur.as_nanos());
         }
 
@@ -438,10 +448,10 @@ fn test_pattern(pattern: &Pattern, time_samples: &mut [(f64, f64)]) -> PatternRe
 
     let (score, non_linear) = SCORE_FUNCTION(time_samples);
 
-    if DEBUG_LEVEL >= 1 {
+    if *DEBUG_LEVEL >= 1 {
         println!("{:<30}{:?}", score, pattern);
     }
-    if DEBUG_LEVEL >= 2 {
+    if *DEBUG_LEVEL >= 2 {
         println!("{:?}", time_samples);
     }
 
