@@ -42,14 +42,14 @@ use std::os::unix::process::CommandExt;
 use std::panic;
 use std::process::Command;
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     LazyLock, Mutex,
+    atomic::{AtomicU64, Ordering},
 };
 use std::time::{Duration, Instant};
 
 use crossbeam_utils::thread;
 use pulldown_cmark::{Options, Parser};
-use rand::{distr::Distribution, seq::IndexedRandom, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, distr::Distribution, seq::IndexedRandom};
 use rand_xoshiro::Xoshiro256Plus;
 use serde::{Deserialize, Serialize};
 
@@ -90,7 +90,7 @@ static DEBUG_LEVEL: LazyLock<u8> = LazyLock::new(|| {
         .ok()
         .map(|s| {
             s.parse::<u8>().unwrap_or_else(|e| {
-                eprint!("Couldn't parse debug level, error is {e:?}");
+                eprint!("Couldn't parse debug level, use default value `0`, error is {e:?}");
                 0_u8
             })
         })
@@ -147,24 +147,23 @@ impl<'a> Distribution<Pattern> for UniformPatterns<'a> {
     }
 }
 
-#[derive(clap::Parser)]
-struct Opts {
-    /// Run in retest mode
-    #[arg(long)]
-    retest: bool,
-    /// Run regression tests
-    #[arg(long)]
-    regressions: bool,
-}
-
 fn main() {
-    let num_cpus = (num_cpus::get() as f32 * 0.8).ceil() as usize;
-    let Opts {
-        retest,
-        regressions,
-    } = clap::Parser::parse();
+    let args = env::args().collect::<Vec<String>>();
+    let mut opts = getopts::Options::new();
+    opts.optflag("", "retest", "Run in retest mode");
+    opts.optflag("", "regressions", "Run regression tests");
 
-    if retest {
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(f) => {
+            eprintln!("{}\n{}", f, opts.usage(&brief(&args[0])));
+            std::process::exit(1);
+        }
+    };
+
+    let num_cpus = (num_cpus::get() as f32 * 0.8).ceil() as usize;
+
+    if matches.opt_present("retest") {
         for pattern in io::stdin().lock().lines().map_while(Result::ok) {
             println!("Retesting: {}", &pattern);
             let pattern = serde_json::from_str(&pattern).expect("Couldn't deserialize pattern");
@@ -172,12 +171,19 @@ fn main() {
                 println!("score: {}", res.score())
             }
         }
-    } else if regressions {
+    } else if matches.opt_present("regressions") {
         let exit_code = regression_test();
         std::process::exit(exit_code);
     } else {
         fuzz(num_cpus);
     }
+}
+
+fn brief(program: &str) -> String {
+    format!(
+        "Usage: {} [options]\n\n{}",
+        program, "Please provide the correct parameters.",
+    )
 }
 
 /// Tests patterns of previously known super-linear parsing behaviour.
