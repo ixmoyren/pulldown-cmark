@@ -59,8 +59,8 @@ fn generate_tests_from_spec() {
             .join(file_path.file_name().expect("Invalid filename"))
             .with_extension("rs");
 
-        let mut spec_rs =
-            File::create(&rs_test_file).expect(&format!("Could not create {:?}", rs_test_file));
+        let mut spec_rs = File::create(&rs_test_file)
+            .unwrap_or_else(|_| panic!("Could not create {:?}", rs_test_file));
 
         let spec_name = file_path.file_stem().unwrap().to_str().unwrap();
 

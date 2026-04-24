@@ -2,19 +2,19 @@
 //! are in a linear chain with potential inline markup identified.
 
 use alloc::{string::String, vec::Vec};
-use core::{cmp::max, ops::Range, u8};
+use core::{cmp::max, ops::Range};
 use unicase::UniCase;
 
 use crate::{
-    linklabel::{scan_link_label_rest, LinkLabel},
+    ContainerKind, HeadingLevel, MetadataBlockKind, Options,
+    linklabel::{LinkLabel, scan_link_label_rest},
     parse::{
-        scan_containers, Allocations, FootnoteDef, HeadingAttributes, Item, ItemBody, LinkDef,
-        LINK_MAX_NESTED_PARENS,
+        Allocations, FootnoteDef, HeadingAttributes, Item, ItemBody, LINK_MAX_NESTED_PARENS,
+        LinkDef, scan_containers,
     },
     scanners::*,
     strings::CowStr,
     tree::{Tree, TreeIndex},
-    ContainerKind, HeadingLevel, MetadataBlockKind, Options,
 };
 
 /// Runs the first pass, which resolves the block structure of the document,
@@ -145,15 +145,15 @@ impl<'a, 'b> FirstPass<'a, 'b> {
                             body: ItemBody::TaskListMarker(is_checked),
                         });
                     if let Some(task_list_marker) = task_list_marker {
-                        if let Some(n) = scan_blank_line(&bytes[task_list_marker.end..]) {
+                        return if let Some(n) = scan_blank_line(&bytes[task_list_marker.end..]) {
                             self.tree.append(task_list_marker);
                             self.begin_list_item = Some(task_list_marker.end + n);
-                            return task_list_marker.end + n;
+                            task_list_marker.end + n
                         } else {
                             line_start.scan_all_space();
                             let ix = start_ix + line_start.bytes_scanned();
-                            return self.parse_paragraph(ix, Some(task_list_marker));
-                        }
+                            self.parse_paragraph(ix, Some(task_list_marker))
+                        };
                     }
                 }
             } else if let Some((indent, child, item)) = self
@@ -765,11 +765,11 @@ impl<'a, 'b> FirstPass<'a, 'b> {
                     }
                     break;
                 }
-                if self.options.contains(Options::ENABLE_CONTAINER_EXTENSIONS) && !current_container
+                if self.options.contains(Options::ENABLE_CONTAINER_EXTENSIONS)
+                    && !current_container
+                    && line_start.scan_closing_container_extensions_fence(3)
                 {
-                    if line_start.scan_closing_container_extensions_fence(3) {
-                        break;
-                    }
+                    break;
                 }
             }
             line_start.scan_all_space();
@@ -1964,7 +1964,7 @@ impl<'a, 'b> FirstPass<'a, 'b> {
                     };
                     linebuf.push_str(&text[linestart..bytecount]);
                     linebuf.push('\n'); // normalize line breaks
-                                        // skip line break
+                    // skip line break
                     bytecount += 1;
                     if c == b'\r' && bytes.get(bytecount) == Some(&b'\n') {
                         bytecount += 1;
@@ -2067,11 +2067,7 @@ impl<'a, 'b> FirstPass<'a, 'b> {
                 return Some(backup);
             }
         }
-        if newlines > 0 {
-            Some(backup)
-        } else {
-            None
-        }
+        if newlines > 0 { Some(backup) } else { None }
     }
 
     /// Checks whether we should break a paragraph on the given input.
@@ -2914,7 +2910,7 @@ mod simd {
 
     #[cfg(test)]
     mod simd_test {
-        use super::{super::create_lut, iterate_special_bytes, LoopInstruction};
+        use super::{super::create_lut, LoopInstruction, iterate_special_bytes};
         use crate::Options;
 
         fn check_expected_indices(bytes: &[u8], expected: &[usize], skip: usize) {
