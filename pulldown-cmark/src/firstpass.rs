@@ -1026,7 +1026,7 @@ impl<'a, 'b> FirstPass<'a, 'b> {
                         LoopInstruction::ContinueAndSkip(1)
                     }
                 }
-                c @ b'*' | c @ b'_' | c @ b'~' | c @ b'^' => {
+                c @ b'*' | c @ b'_' | c @ b'~' | c @ b'^' | c @ b'=' => {
                     let string_suffix = &self.text[ix..];
                     let count = 1 + scan_ch_repeat(&string_suffix.as_bytes()[1..], c);
                     let can_open = delim_run_can_open(
@@ -1045,7 +1045,11 @@ impl<'a, 'b> FirstPass<'a, 'b> {
                         mode,
                         self.options,
                     );
-                    let is_valid_seq = (c != b'~' || count <= 2) || (c == b'~' && count == 2);
+                    let is_valid_seq = if c == b'=' {
+                        count == 2
+                    } else {
+                        (c != b'~' || count <= 2) || (c == b'~' && count == 2)
+                    };
 
                     if (can_open || can_close) && is_valid_seq {
                         self.tree.append_text(begin_text, ix, backslash_escaped);
@@ -2262,7 +2266,7 @@ fn scan_paragraph_interrupt_no_table(
             && (get_html_end_tag(&bytes[1..]).is_some() || starts_html_block_type_6(&bytes[1..]))
         || definition_list
             && ((current_container
-        && tree.peek_up().is_some_and(|cur| {
+                && tree.peek_up().is_some_and(|cur| {
                     matches!(
                         tree[cur].item.body,
                         ItemBody::Paragraph
@@ -2270,7 +2274,7 @@ fn scan_paragraph_interrupt_no_table(
                             | ItemBody::MaybeDefinitionListTitle
                     )
                 }))
-        || tree.walk_spine().nth(tree_position).is_some_and(|cur| {
+                || tree.walk_spine().nth(tree_position).is_some_and(|cur| {
                     matches!(tree[*cur].item.body, ItemBody::DefinitionListDefinition(_))
                 }))
             && bytes.starts_with(b":")
@@ -2281,7 +2285,7 @@ fn scan_paragraph_interrupt_no_table(
                 &|_| None,
                 tree.is_in_table(),
             )
-        .is_some_and(|(len, _)| bytes.get(2 + len) == Some(&b':')))
+            .is_some_and(|(len, _)| bytes.get(2 + len) == Some(&b':')))
 }
 
 /// Assumes `text_bytes` is preceded by `<`.
@@ -2428,6 +2432,9 @@ fn delim_run_can_open(
     if delim == b'~' && run_len > 1 {
         return true;
     }
+    if delim == b'=' {
+        return run_len == 2;
+    }
     let prev_char = s[..ix].chars().last().unwrap();
     if delim == b'~'
         && (prev_char == '~' || options.contains(Options::ENABLE_SUBSCRIPT))
@@ -2479,6 +2486,9 @@ fn delim_run_can_close(
     if delim == b'^' && !is_punctuation(prev_char) {
         return true;
     }
+    if delim == b'=' {
+        return run_len == 2;
+    }
     if delim == b'~' && (prev_char == '~' || options.contains(Options::ENABLE_SUBSCRIPT)) {
         return true;
     }
@@ -2516,6 +2526,9 @@ fn special_bytes(options: &Options) -> [bool; 256] {
         || options.contains(Options::ENABLE_SUBSCRIPT)
     {
         bytes[b'~' as usize] = true;
+    }
+    if options.contains(Options::ENABLE_MARK) {
+        bytes[b'=' as usize] = true;
     }
     if options.contains(Options::ENABLE_SUPERSCRIPT) {
         bytes[b'^' as usize] = true;

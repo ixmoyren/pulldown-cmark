@@ -149,9 +149,10 @@ fn super_sub_test_11() {
 "##;
     let expected = r##"<p>H<sup>+</sup> + OH<sup>-</sup></p>
 "##;
+
     let mut opts = default_test_opts();
     opts.insert(Options::ENABLE_SUBSCRIPT);
-
+    opts.insert(Options::ENABLE_FOOTNOTES);
     test_markdown_html(original, expected, opts);
 }
 
@@ -164,6 +165,7 @@ fn super_sub_test_12() {
 
     let mut opts = default_test_opts();
     opts.insert(Options::ENABLE_SUBSCRIPT);
+    opts.insert(Options::ENABLE_FOOTNOTES);
     test_markdown_html(original, expected, opts);
 }
 
@@ -173,8 +175,10 @@ fn super_sub_test_13() {
 "##;
     let expected = r##"<p>NH<sub>4</sub><sup>+</sup></p>
 "##;
+
     let mut opts = default_test_opts();
     opts.insert(Options::ENABLE_SUBSCRIPT);
+    opts.insert(Options::ENABLE_FOOTNOTES);
     test_markdown_html(original, expected, opts);
 }
 
@@ -184,8 +188,9 @@ fn super_sub_test_14() {
 "##;
     let expected = r##"<p>^+^ not superscript</p>
 "##;
+
     let mut opts = default_test_opts();
     opts.insert(Options::ENABLE_SUBSCRIPT);
-
+    opts.insert(Options::ENABLE_FOOTNOTES);
     test_markdown_html(original, expected, opts);
 }

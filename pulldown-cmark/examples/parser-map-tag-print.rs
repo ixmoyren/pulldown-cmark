@@ -23,6 +23,7 @@ fn main() {
         "*emphasis*\n",
         "**strong**\n",
         "~~strikethrough~~\n",
+        "==marked==\n",
         "[My Link](http://example.com)\n",
         "![My Image](http://example.com/image.jpg)\n",
         "\n",
@@ -43,8 +44,8 @@ fn main() {
     // This filter simply returns the same event without any changes;
     // you can compare the `event-filter` example which alters the output.
     let parser = Parser::new_ext(markdown_input, Options::all()).map(|event| {
-        match &event {
-            Event::Start(tag) => match tag {
+        if let Event::Start(tag) = &event {
+            match tag {
                 Tag::HtmlBlock => println!("HtmlBlock"),
                 Tag::Heading {
                     level,
@@ -69,6 +70,7 @@ fn main() {
                 Tag::Subscript => println!("Subscript (this is a span tag)"),
                 Tag::Strong => println!("Strong (this is a span tag)"),
                 Tag::Strikethrough => println!("Strikethrough (this is a span tag)"),
+                Tag::Mark => println!("Mark (this is a span tag)"),
                 Tag::BlockQuote(kind) => println!("BlockQuote ({:?})", kind),
                 Tag::CodeBlock(code_block_kind) => {
                     println!("CodeBlock code_block_kind: {:?}", code_block_kind)
@@ -103,8 +105,7 @@ fn main() {
                 Tag::TableCell => println!("TableCell (contains inline tags)"),
                 Tag::FootnoteDefinition(label) => println!("FootnoteDefinition label: {}", label),
                 Tag::MetadataBlock(kind) => println!("MetadataBlock: {:?}", kind),
-            },
-            _ => (),
+            }
         };
         event
     });

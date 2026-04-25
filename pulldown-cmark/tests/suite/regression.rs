@@ -3834,7 +3834,9 @@ hello world
 ���
 hello�world</p>
 "##;
-    let opts = default_test_opts();
+
+    let mut opts = default_test_opts();
+    opts.insert(Options::ENABLE_FOOTNOTES);
     test_markdown_html(original, expected, opts);
 }
 
@@ -3850,7 +3852,9 @@ fn regression_test_213() {
 <code>�end</code>
 <code>�</code></p>
 "##;
-    let opts = default_test_opts();
+
+    let mut opts = default_test_opts();
+    opts.insert(Options::ENABLE_FOOTNOTES);
     test_markdown_html(original, expected, opts);
 }
 
@@ -3867,8 +3871,8 @@ $$ $$
 <span class="math math-display">�</span></p>
 "##;
 
-    let opts = default_test_opts();
-
+    let mut opts = default_test_opts();
+    opts.insert(Options::ENABLE_FOOTNOTES);
     test_markdown_html(original, expected, opts);
 }
 
@@ -3884,7 +3888,9 @@ fn regression_test_215() {
 <a href="x" title="�end">x</a>
 <a href="x" title="�">x</a></p>
 "##;
-    let opts = default_test_opts();
+
+    let mut opts = default_test_opts();
+    opts.insert(Options::ENABLE_FOOTNOTES);
     test_markdown_html(original, expected, opts);
 }
 
@@ -3901,7 +3907,8 @@ fn regression_test_216() {
 <a href="%EF%BF%BD">x</a></p>
 "##;
 
-    let opts = default_test_opts();
+    let mut opts = default_test_opts();
+    opts.insert(Options::ENABLE_FOOTNOTES);
     test_markdown_html(original, expected, opts);
 }
 
@@ -3923,7 +3930,8 @@ fn regression_test_217() {
 <a href="https://example.com/d">�</a></p>
 "##;
 
-    let opts = default_test_opts();
+    let mut opts = default_test_opts();
+    opts.insert(Options::ENABLE_FOOTNOTES);
     test_markdown_html(original, expected, opts);
 }
 
@@ -3945,7 +3953,8 @@ fn regression_test_218() {
 <a href="https://example.com/d">�</a></p>
 "##;
 
-    let opts = default_test_opts();
+    let mut opts = default_test_opts();
+    opts.insert(Options::ENABLE_FOOTNOTES);
     test_markdown_html(original, expected, opts);
 }
 
@@ -3967,6 +3976,7 @@ fn regression_test_219() {
 <a href="https://example.com/d">d</a></p>
 "##;
 
-    let opts = default_test_opts();
+    let mut opts = default_test_opts();
+    opts.insert(Options::ENABLE_FOOTNOTES);
     test_markdown_html(original, expected, opts);
 }

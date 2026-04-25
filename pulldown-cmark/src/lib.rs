@@ -109,8 +109,6 @@ mod scanners;
 mod strings;
 mod tree;
 
-use core::fmt::Display;
-
 pub use crate::{
     parse::{
         BrokenLink, BrokenLinkCallback, DefaultParserCallbacks, OffsetIter, Parser,
@@ -119,6 +117,7 @@ pub use crate::{
     strings::{CowStr, InlineStr},
     utils::*,
 };
+use core::fmt::Display;
 
 /// Codeblock kind.
 #[derive(Clone, Debug, PartialEq)]
@@ -288,6 +287,12 @@ pub enum Tag<'a> {
     /// ~subscript~ ~~if also enabled this is strikethrough~~
     /// ```
     Subscript,
+    /// Only parsed and emitted with [`Options::ENABLE_MARK`].
+    ///
+    /// ```markdown
+    /// ==marked==
+    /// ```
+    Mark,
 
     /// A link.
     Link {
@@ -335,6 +340,7 @@ impl<'a> Tag<'a> {
             Tag::Emphasis => TagEnd::Emphasis,
             Tag::Strong => TagEnd::Strong,
             Tag::Strikethrough => TagEnd::Strikethrough,
+            Tag::Mark => TagEnd::Mark,
             Tag::Link { .. } => TagEnd::Link,
             Tag::Image { .. } => TagEnd::Image,
             Tag::MetadataBlock(kind) => TagEnd::MetadataBlock(*kind),
@@ -377,6 +383,7 @@ impl<'a> Tag<'a> {
             Tag::Strikethrough => Tag::Strikethrough,
             Tag::Superscript => Tag::Superscript,
             Tag::Subscript => Tag::Subscript,
+            Tag::Mark => Tag::Mark,
             Tag::Link {
                 link_type,
                 dest_url,
@@ -439,6 +446,7 @@ pub enum TagEnd {
     Strikethrough,
     Superscript,
     Subscript,
+    Mark,
 
     Link,
     Image,
@@ -803,6 +811,12 @@ bitflags::bitflags! {
         /// :::
         /// ```
         const ENABLE_CONTAINER_EXTENSIONS = 1 << 16;
+        /// Mark
+        ///
+        /// ```markdown
+        /// ==marked==
+        /// ```
+        const ENABLE_MARK = 1 << 17;
     }
 }
 

@@ -81,6 +81,7 @@ pub(crate) enum ItemBody {
     Strikethrough,
     Superscript,
     Subscript,
+    Mark,
     Math(CowIndex, bool), // true for display math
     Code(CowIndex),
     Link(LinkIndex),
@@ -165,6 +166,7 @@ impl ItemBody {
                 | Emphasis
                 | Strong
                 | Strikethrough
+                | Mark
                 | Math(..)
                 | Code(..)
                 | Link(..)
@@ -1069,6 +1071,20 @@ impl<'input> ParserInner<'input> {
                                             backslash_escaped: false,
                                         }
                                     }
+                                } else if c == b'=' {
+                                    if inc == 2 {
+                                        if self.options.contains(Options::ENABLE_MARK) {
+                                            ItemBody::Mark
+                                        } else {
+                                            ItemBody::Text {
+                                                backslash_escaped: false,
+                                            }
+                                        }
+                                    } else {
+                                        ItemBody::Text {
+                                            backslash_escaped: false,
+                                        }
+                                    }
                                 } else if inc == 2 {
                                     ItemBody::Strong
                                 } else {
@@ -1612,7 +1628,7 @@ struct InlineStack {
     // a strikethrough delimiter will never match with any element
     // in the stack with index smaller than
     // `lower_bounds[InlineStack::TILDES]`.
-    lower_bounds: [usize; 10],
+    lower_bounds: [usize; 11],
 }
 
 impl InlineStack {
@@ -1625,6 +1641,7 @@ impl InlineStack {
     const TILDES: usize = 5;
     const UNDERSCORE_BASE: usize = 6;
     const CIRCUMFLEXES: usize = 9;
+    const EQUALS: usize = 10;
 
     fn pop_all(&mut self, tree: &mut Tree<Item>) {
         for el in self.stack.drain(..) {
@@ -1634,53 +1651,57 @@ impl InlineStack {
                 };
             }
         }
-        self.lower_bounds = [0; 10];
+        self.lower_bounds = [0; 11];
     }
 
     fn get_lowerbound(&self, c: u8, count: usize, both: bool) -> usize {
-        if c == b'_' {
-            let mod3_lower = self.lower_bounds[InlineStack::UNDERSCORE_BASE + count % 3];
-            if both {
-                mod3_lower
-            } else {
-                min(
-                    mod3_lower,
-                    self.lower_bounds[InlineStack::UNDERSCORE_NOT_BOTH],
-                )
+        match c {
+            b'_' => {
+                let mod3_lower = self.lower_bounds[InlineStack::UNDERSCORE_BASE + count % 3];
+                if both {
+                    mod3_lower
+                } else {
+                    min(
+                        mod3_lower,
+                        self.lower_bounds[InlineStack::UNDERSCORE_NOT_BOTH],
+                    )
+                }
             }
-        } else if c == b'*' {
-            let mod3_lower = self.lower_bounds[InlineStack::ASTERISK_BASE + count % 3];
-            if both {
-                mod3_lower
-            } else {
-                min(
-                    mod3_lower,
-                    self.lower_bounds[InlineStack::ASTERISK_NOT_BOTH],
-                )
+            b'*' => {
+                let mod3_lower = self.lower_bounds[InlineStack::ASTERISK_BASE + count % 3];
+                if both {
+                    mod3_lower
+                } else {
+                    min(
+                        mod3_lower,
+                        self.lower_bounds[InlineStack::ASTERISK_NOT_BOTH],
+                    )
+                }
             }
-        } else if c == b'^' {
-            self.lower_bounds[InlineStack::CIRCUMFLEXES]
-        } else {
-            self.lower_bounds[InlineStack::TILDES]
+            b'^' => self.lower_bounds[InlineStack::CIRCUMFLEXES],
+            b'=' => self.lower_bounds[InlineStack::EQUALS],
+            _ => self.lower_bounds[InlineStack::TILDES],
         }
     }
 
     fn set_lowerbound(&mut self, c: u8, count: usize, both: bool, new_bound: usize) {
-        if c == b'_' {
-            if both {
-                self.lower_bounds[InlineStack::UNDERSCORE_BASE + count % 3] = new_bound;
-            } else {
-                self.lower_bounds[InlineStack::UNDERSCORE_NOT_BOTH] = new_bound;
+        match c {
+            b'_' => {
+                if both {
+                    self.lower_bounds[InlineStack::UNDERSCORE_BASE + count % 3] = new_bound;
+                } else {
+                    self.lower_bounds[InlineStack::UNDERSCORE_NOT_BOTH] = new_bound;
+                }
             }
-        } else if c == b'*' {
-            self.lower_bounds[InlineStack::ASTERISK_BASE + count % 3] = new_bound;
-            if !both {
-                self.lower_bounds[InlineStack::ASTERISK_NOT_BOTH] = new_bound;
+            b'*' => {
+                self.lower_bounds[InlineStack::ASTERISK_BASE + count % 3] = new_bound;
+                if !both {
+                    self.lower_bounds[InlineStack::ASTERISK_NOT_BOTH] = new_bound;
+                }
             }
-        } else if c == b'^' {
-            self.lower_bounds[InlineStack::CIRCUMFLEXES] = new_bound;
-        } else {
-            self.lower_bounds[InlineStack::TILDES] = new_bound;
+            b'^' => self.lower_bounds[InlineStack::CIRCUMFLEXES] = new_bound,
+            b'=' => self.lower_bounds[InlineStack::EQUALS] = new_bound,
+            _ => self.lower_bounds[InlineStack::TILDES] = new_bound,
         }
     }
 
@@ -1706,7 +1727,7 @@ impl InlineStack {
             .cloned()
             .enumerate()
             .rfind(|(_, el)| {
-                if (c == b'~' || c == b'^') && run_length != el.run_length {
+                if (c == b'~' || c == b'^' || c == b'=') && run_length != el.run_length {
                     return false;
                 }
                 el.c == c
@@ -2331,6 +2352,7 @@ fn body_to_tag_end(body: &ItemBody) -> TagEnd {
         ItemBody::Subscript => TagEnd::Subscript,
         ItemBody::Strong => TagEnd::Strong,
         ItemBody::Strikethrough => TagEnd::Strikethrough,
+        ItemBody::Mark => TagEnd::Mark,
         ItemBody::Link(..) => TagEnd::Link,
         ItemBody::Image(..) => TagEnd::Image,
         ItemBody::Heading(level, _) => TagEnd::Heading(level),
@@ -2379,6 +2401,7 @@ fn item_to_event<'a>(item: Item, text: &'a str, allocs: &mut Allocations<'a>) ->
         ItemBody::Subscript => Tag::Subscript,
         ItemBody::Strong => Tag::Strong,
         ItemBody::Strikethrough => Tag::Strikethrough,
+        ItemBody::Mark => Tag::Mark,
         ItemBody::Link(link_ix) => {
             let (link_type, dest_url, title, id) = allocs.take_link(link_ix);
             Tag::Link {

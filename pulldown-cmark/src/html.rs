@@ -28,14 +28,14 @@ use std::collections::HashMap;
 use hashbrown::HashMap;
 #[cfg(feature = "std")]
 use pulldown_cmark_escape::IoWriter;
-use pulldown_cmark_escape::{escape_href, escape_html, escape_html_body_text, FmtWriter, StrWrite};
+use pulldown_cmark_escape::{FmtWriter, StrWrite, escape_href, escape_html, escape_html_body_text};
 
 use crate::{
-    strings::CowStr,
     Alignment, BlockQuoteKind, CodeBlockKind,
     ContainerKind::*,
     Event::{self, *},
     LinkType, Tag, TagEnd,
+    strings::CowStr,
 };
 
 enum TableState {
@@ -355,6 +355,7 @@ where
             Tag::Emphasis => self.write("<em>"),
             Tag::Strong => self.write("<strong>"),
             Tag::Strikethrough => self.write("<del>"),
+            Tag::Mark => self.write("<span class=\"markdown-mark\">"),
             Tag::Link {
                 link_type: LinkType::Email,
                 dest_url,
@@ -495,6 +496,9 @@ where
             }
             TagEnd::Strikethrough => {
                 self.write("</del>")?;
+            }
+            TagEnd::Mark => {
+                self.write("</span>")?;
             }
             TagEnd::Link => {
                 self.write("</a>")?;
