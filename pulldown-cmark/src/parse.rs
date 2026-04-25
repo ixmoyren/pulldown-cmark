@@ -35,13 +35,13 @@ use hashbrown::HashMap;
 use unicase::UniCase;
 
 use crate::{
+    Alignment, BlockQuoteKind, CodeBlockKind, ContainerKind, Event, HeadingLevel, LinkType,
+    MetadataBlockKind, Options, Tag, TagEnd,
     firstpass::run_first_pass,
-    linklabel::{scan_link_label_rest, FootnoteLabel, LinkLabel, ReferenceLabel},
+    linklabel::{FootnoteLabel, LinkLabel, ReferenceLabel, scan_link_label_rest},
     scanners::*,
     strings::CowStr,
     tree::{Tree, TreeIndex},
-    Alignment, BlockQuoteKind, CodeBlockKind, ContainerKind, Event, HeadingLevel, LinkType,
-    MetadataBlockKind, Options, Tag, TagEnd,
 };
 
 // Allowing arbitrary depth nested parentheses inside link destinations
@@ -518,7 +518,7 @@ impl<'input> ParserInner<'input> {
                         cur = self.tree[cur_ix].next;
                         continue;
                     }
-                    let is_display = self.tree[cur_ix].next.map_or(false, |next_ix| {
+                    let is_display = self.tree[cur_ix].next.is_some_and(|next_ix| {
                         matches!(
                             self.tree[next_ix].item.body,
                             ItemBody::MaybeMath(_can_open, _can_close, _brace_context)
@@ -544,7 +544,7 @@ impl<'input> ParserInner<'input> {
                                 self.tree[scan_ix].item.body
                             {
                                 let delim_is_display =
-                                    self.tree[scan_ix].next.map_or(false, |next_ix| {
+                                    self.tree[scan_ix].next.is_some_and(|next_ix| {
                                         matches!(
                                             self.tree[next_ix].item.body,
                                             ItemBody::MaybeMath(
@@ -698,8 +698,7 @@ impl<'input> ParserInner<'input> {
                         }
                     }
                     if let Some(tos) = tos_link {
-                        // skip rendering if already in a link, unless its an
-                        // image
+                        // skip rendering if already in a link, unless its an image
                         if tos.ty != LinkStackTy::Image
                             && matches!(
                                 self.tree[self.tree.peek_up().unwrap()].item.body,
@@ -2370,7 +2369,7 @@ fn item_to_event<'a>(item: Item, text: &'a str, allocs: &mut Allocations<'a>) ->
         ItemBody::SoftBreak => return Event::SoftBreak,
         ItemBody::HardBreak(_) => return Event::HardBreak,
         ItemBody::FootnoteReference(cow_ix) => {
-            return Event::FootnoteReference(allocs.take_cow(cow_ix))
+            return Event::FootnoteReference(allocs.take_cow(cow_ix));
         }
         ItemBody::TaskListMarker(checked) => return Event::TaskListMarker(checked),
         ItemBody::Rule => return Event::Rule,
@@ -2438,7 +2437,7 @@ fn item_to_event<'a>(item: Item, text: &'a str, allocs: &mut Allocations<'a>) ->
                 Event::DisplayMath(allocs.take_cow(cow_ix))
             } else {
                 Event::InlineMath(allocs.take_cow(cow_ix))
-            }
+            };
         }
         ItemBody::DefinitionList(_) => Tag::DefinitionList,
         ItemBody::DefinitionListTitle => Tag::DefinitionListTitle,
