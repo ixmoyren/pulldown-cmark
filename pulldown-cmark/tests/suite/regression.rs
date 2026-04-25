@@ -3834,8 +3834,8 @@ hello world
 ���
 hello�world</p>
 "##;
-
-    test_markdown_html(original, expected, false, false, false, false, false, false, false);
+    let opts = default_test_opts();
+    test_markdown_html(original, expected, opts);
 }
 
 #[test]
@@ -3850,8 +3850,8 @@ fn regression_test_213() {
 <code>�end</code>
 <code>�</code></p>
 "##;
-
-    test_markdown_html(original, expected, false, false, false, false, false, false, false);
+    let opts = default_test_opts();
+    test_markdown_html(original, expected, opts);
 }
 
 #[test]
@@ -3867,7 +3867,9 @@ $$ $$
 <span class="math math-display">�</span></p>
 "##;
 
-    test_markdown_html(original, expected, false, false, false, false, false, false, false);
+    let opts = default_test_opts();
+
+    test_markdown_html(original, expected, opts);
 }
 
 #[test]
@@ -3882,8 +3884,8 @@ fn regression_test_215() {
 <a href="x" title="�end">x</a>
 <a href="x" title="�">x</a></p>
 "##;
-
-    test_markdown_html(original, expected, false, false, false, false, false, false, false);
+    let opts = default_test_opts();
+    test_markdown_html(original, expected, opts);
 }
 
 #[test]
@@ -3899,7 +3901,8 @@ fn regression_test_216() {
 <a href="%EF%BF%BD">x</a></p>
 "##;
 
-    test_markdown_html(original, expected, false, false, false, false, false, false, false);
+    let opts = default_test_opts();
+    test_markdown_html(original, expected, opts);
 }
 
 #[test]
@@ -3920,7 +3923,8 @@ fn regression_test_217() {
 <a href="https://example.com/d">�</a></p>
 "##;
 
-    test_markdown_html(original, expected, false, false, false, false, false, false, false);
+    let opts = default_test_opts();
+    test_markdown_html(original, expected, opts);
 }
 
 #[test]
@@ -3941,7 +3945,8 @@ fn regression_test_218() {
 <a href="https://example.com/d">�</a></p>
 "##;
 
-    test_markdown_html(original, expected, false, false, false, false, false, false, false);
+    let opts = default_test_opts();
+    test_markdown_html(original, expected, opts);
 }
 
 #[test]
@@ -3962,5 +3967,6 @@ fn regression_test_219() {
 <a href="https://example.com/d">d</a></p>
 "##;
 
-    test_markdown_html(original, expected, false, false, false, false, false, false, false);
+    let opts = default_test_opts();
+    test_markdown_html(original, expected, opts);
 }

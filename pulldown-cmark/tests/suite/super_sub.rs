@@ -149,8 +149,10 @@ fn super_sub_test_11() {
 "##;
     let expected = r##"<p>H<sup>+</sup> + OH<sup>-</sup></p>
 "##;
+    let mut opts = default_test_opts();
+    opts.insert(Options::ENABLE_SUBSCRIPT);
 
-    test_markdown_html(original, expected, false, false, false, true, false, false, false);
+    test_markdown_html(original, expected, opts);
 }
 
 #[test]
@@ -160,7 +162,9 @@ fn super_sub_test_12() {
     let expected = r##"<p>Ca<sup>2+</sup> + CO<sub>3</sub><sup>2-</sup></p>
 "##;
 
-    test_markdown_html(original, expected, false, false, false, true, false, false, false);
+    let mut opts = default_test_opts();
+    opts.insert(Options::ENABLE_SUBSCRIPT);
+    test_markdown_html(original, expected, opts);
 }
 
 #[test]
@@ -169,8 +173,9 @@ fn super_sub_test_13() {
 "##;
     let expected = r##"<p>NH<sub>4</sub><sup>+</sup></p>
 "##;
-
-    test_markdown_html(original, expected, false, false, false, true, false, false, false);
+    let mut opts = default_test_opts();
+    opts.insert(Options::ENABLE_SUBSCRIPT);
+    test_markdown_html(original, expected, opts);
 }
 
 #[test]
@@ -179,6 +184,8 @@ fn super_sub_test_14() {
 "##;
     let expected = r##"<p>^+^ not superscript</p>
 "##;
+    let mut opts = default_test_opts();
+    opts.insert(Options::ENABLE_SUBSCRIPT);
 
-    test_markdown_html(original, expected, false, false, false, true, false, false, false);
+    test_markdown_html(original, expected, opts);
 }
