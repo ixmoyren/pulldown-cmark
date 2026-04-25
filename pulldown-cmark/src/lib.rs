@@ -695,7 +695,18 @@ bitflags::bitflags! {
         ///
         /// [^1]: footnote defined
         const ENABLE_FOOTNOTES = 1 << 2;
+        /// Basic strikethrough is between two tildes.
+        ///
+        /// ```markdown
+        /// ~~This is *stricken out*~~
+        /// ```
         const ENABLE_STRIKETHROUGH = 1 << 3;
+        /// TaskLists
+        ///
+        /// ```markdown
+        /// * [x] Done
+        /// * [ ] Not done
+        /// ```
         const ENABLE_TASKLISTS = 1 << 4;
         /// Enables replacement of ASCII punctuation characters with
         /// Unicode ligatures and smart quotes.
@@ -760,11 +771,37 @@ bitflags::bitflags! {
         ///   : definition 2b
         /// ```
         const ENABLE_DEFINITION_LIST = 1 << 12;
+        /// Superscript
+        ///
+        /// ```markdown
+        /// ^This is super^
+        /// ```
         const ENABLE_SUPERSCRIPT = 1 << 13;
+        /// Subscript
+        ///
+        /// ```markdown
+        /// ~This is sub~
+        /// ```
         const ENABLE_SUBSCRIPT = 1 << 14;
         /// Obsidian-style Wikilinks.
+        ///
+        /// ```markdown
+        /// This is a [[WikiLink]].
+        ///
+        /// This is a cute dog ![[dog.png]].
+        ///
+        /// This is [[WikiLink|a pothole]].
+        /// ```
         const ENABLE_WIKILINKS = 1 << 15;
         /// Colon-delimited Container Extension Blocks.
+        ///
+        /// ```markdown
+        /// ::: spoiler Is this expandable?
+        /// Is this collapsable?
+        /// > Is this **bold**?
+        /// > Is this **bold**?
+        /// :::
+        /// ```
         const ENABLE_CONTAINER_EXTENSIONS = 1 << 16;
     }
 }
