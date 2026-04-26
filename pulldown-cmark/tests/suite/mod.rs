@@ -6,6 +6,7 @@ pub use super::{default_test_opts, test_markdown_html};
 mod blockquotes_tags;
 mod container_extensions;
 mod definition_lists;
+mod emoji_short_code;
 mod footnotes;
 mod gfm_strikethrough;
 mod gfm_table;

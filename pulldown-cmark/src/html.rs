@@ -118,6 +118,9 @@ where
                     escape_html_body_text(&mut self.writer, &text)?;
                     self.write("</code>")?;
                 }
+                EmojiShortcode(short_code) => {
+                    escape_html(&mut self.writer, &short_code)?;
+                }
                 InlineMath(text) => {
                     self.write(r#"<span class="math math-inline">"#)?;
                     escape_html(&mut self.writer, &text)?;
@@ -533,6 +536,11 @@ where
                     escape_html(&mut self.writer, &text)?;
                     self.end_newline = text.ends_with('\n');
                 }
+                EmojiShortcode(short_code) => {
+                    self.write(":")?;
+                    escape_html(&mut self.writer, &short_code)?;
+                    self.write(":")?;
+                }
                 InlineMath(text) => {
                     self.write("$")?;
                     escape_html(&mut self.writer, &text)?;
@@ -617,7 +625,7 @@ where
 /// let mut bytes = Vec::new();
 /// let parser = Parser::new(markdown_str);
 ///
-/// html::write_html_io(Cursor::new(&mut bytes), parser);
+/// html::write_html_io(Cursor::new(&mut bytes), parser).unwrap();
 ///
 /// assert_eq!(&String::from_utf8_lossy(&bytes)[..], r#"<h1>hello</h1>
 /// <ul>
@@ -653,7 +661,7 @@ where
 /// let mut buf = String::new();
 /// let parser = Parser::new(markdown_str);
 ///
-/// html::write_html_fmt(&mut buf, parser);
+/// html::write_html_fmt(&mut buf, parser).unwrap();
 ///
 /// assert_eq!(buf, r#"<h1>hello</h1>
 /// <ul>

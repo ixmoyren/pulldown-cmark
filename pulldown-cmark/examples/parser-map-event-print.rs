@@ -1,4 +1,4 @@
-use pulldown_cmark::{html, Event, Parser};
+use pulldown_cmark::{Event, Parser, html};
 
 fn main() {
     let markdown_input = "# Example Heading\nExample paragraph with **lorem** _ipsum_ text.";
@@ -19,6 +19,7 @@ fn main() {
             Event::InlineHtml(s) => println!("InlineHtml: {:?}", s),
             Event::Text(s) => println!("Text: {:?}", s),
             Event::Code(s) => println!("Code: {:?}", s),
+            Event::EmojiShortcode(s) => println!("EmojiShortcode: {:?}", s),
             Event::DisplayMath(s) => println!("DisplayMath: {:?}", s),
             Event::InlineMath(s) => println!("Math: {:?}", s),
             Event::FootnoteReference(s) => println!("FootnoteReference: {:?}", s),

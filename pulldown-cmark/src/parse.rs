@@ -84,6 +84,7 @@ pub(crate) enum ItemBody {
     Mark,
     Math(CowIndex, bool), // true for display math
     Code(CowIndex),
+    EmojiShortcode(CowIndex),
     Link(LinkIndex),
     Image(LinkIndex),
     FootnoteReference(CowIndex),
@@ -169,6 +170,7 @@ impl ItemBody {
                 | Mark
                 | Math(..)
                 | Code(..)
+                | EmojiShortcode(..)
                 | Link(..)
                 | Image(..)
                 | FootnoteReference(..)
@@ -2382,6 +2384,7 @@ fn item_to_event<'a>(item: Item, text: &'a str, allocs: &mut Allocations<'a>) ->
     let tag = match item.body {
         ItemBody::Text { .. } => return Event::Text(text[item.start..item.end].into()),
         ItemBody::Code(cow_ix) => return Event::Code(allocs.take_cow(cow_ix)),
+        ItemBody::EmojiShortcode(cow_ix) => return Event::EmojiShortcode(allocs.take_cow(cow_ix)),
         ItemBody::SynthesizeText(cow_ix) => return Event::Text(allocs.take_cow(cow_ix)),
         ItemBody::SynthesizeChar(c) => return Event::Text(c.into()),
         ItemBody::HtmlBlock => Tag::HtmlBlock,

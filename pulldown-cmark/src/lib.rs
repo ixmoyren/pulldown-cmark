@@ -579,6 +579,13 @@ pub enum Event<'a> {
     /// ```
     #[cfg_attr(feature = "serde", serde(borrow))]
     Code(CowStr<'a>),
+    /// An emoji shortcode, e.g. `:smile:`.
+    ///
+    /// ```markdown
+    /// :smile:
+    /// ```
+    #[cfg_attr(feature = "serde", serde(borrow))]
+    EmojiShortcode(CowStr<'a>),
     /// An inline math environment node.
     /// Requires [`Options::ENABLE_MATH`].
     ///
@@ -656,6 +663,7 @@ impl<'a> Event<'a> {
             Event::End(e) => Event::End(e),
             Event::Text(s) => Event::Text(s.into_static()),
             Event::Code(s) => Event::Code(s.into_static()),
+            Event::EmojiShortcode(s) => Event::Code(s.into_static()),
             Event::InlineMath(s) => Event::InlineMath(s.into_static()),
             Event::DisplayMath(s) => Event::DisplayMath(s.into_static()),
             Event::Html(s) => Event::Html(s.into_static()),
@@ -817,6 +825,12 @@ bitflags::bitflags! {
         /// ==marked==
         /// ```
         const ENABLE_MARK = 1 << 17;
+        /// github emoji shortcode
+        ///
+        /// ```mark
+        /// :smile:
+        /// ```
+        const ENABLE_EMOJI_SHORTCODE = 1 << 18;
     }
 }
 

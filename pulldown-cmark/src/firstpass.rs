@@ -1219,6 +1219,31 @@ impl<'a, 'b> FirstPass<'a, 'b> {
                     }
                     _ => LoopInstruction::ContinueAndSkip(0),
                 },
+                b':' if self.options.contains(Options::ENABLE_EMOJI_SHORTCODE) => {
+                    let rest = &bytes[ix + 1..];
+                    let name_len = scan_while(rest, |c| {
+                        c.is_ascii_alphanumeric() || c == b'_' || c == b'-' || c == b'+'
+                    });
+                    if name_len > 0
+                        && rest.get(name_len) == Some(&b':')
+                        && !rest[..name_len].is_empty()
+                    {
+                        let total = 2 + name_len;
+                        let shortcode = &self.text[ix + 1..ix + 1 + name_len];
+                        self.tree.append_text(begin_text, ix, backslash_escaped);
+                        backslash_escaped = false;
+                        let cow_ix = self.allocs.allocate_cow(shortcode.into());
+                        self.tree.append(Item {
+                            start: ix,
+                            end: ix + total,
+                            body: ItemBody::EmojiShortcode(cow_ix),
+                        });
+                        begin_text = ix + total;
+                        LoopInstruction::ContinueAndSkip(total - 1)
+                    } else {
+                        LoopInstruction::ContinueAndSkip(0)
+                    }
+                }
                 b'|' => {
                     if ix != 0 && bytes[ix - 1] == b'\\' {
                         LoopInstruction::ContinueAndSkip(0)
@@ -2538,6 +2563,9 @@ fn special_bytes(options: &Options) -> [bool; 256] {
         bytes[b'{' as usize] = true;
         bytes[b'}' as usize] = true;
     }
+    if options.contains(Options::ENABLE_EMOJI_SHORTCODE) {
+        bytes[b':' as usize] = true;
+    }
     if options.contains(Options::ENABLE_SMART_PUNCTUATION) {
         for &byte in &[b'.', b'-', b'"', b'\''] {
             bytes[byte as usize] = true;
@@ -2776,6 +2804,9 @@ mod simd {
         {
             add_lookup_byte(&mut lookup, b'~');
         }
+        if options.contains(Options::ENABLE_MARK) {
+            add_lookup_byte(&mut lookup, b'=');
+        }
         if options.contains(Options::ENABLE_SUPERSCRIPT) {
             add_lookup_byte(&mut lookup, b'^');
         }
@@ -2783,6 +2814,9 @@ mod simd {
             add_lookup_byte(&mut lookup, b'$');
             add_lookup_byte(&mut lookup, b'{');
             add_lookup_byte(&mut lookup, b'}');
+        }
+        if options.contains(Options::ENABLE_EMOJI_SHORTCODE) {
+            add_lookup_byte(&mut lookup, b':');
         }
         if options.contains(Options::ENABLE_SMART_PUNCTUATION) {
             for &byte in &[b'.', b'-', b'"', b'\''] {
