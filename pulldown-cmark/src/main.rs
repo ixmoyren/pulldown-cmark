@@ -29,7 +29,7 @@ use std::{
     path::PathBuf,
 };
 
-use pulldown_cmark::{html, BrokenLink, Options, Parser};
+use pulldown_cmark::{BrokenLink, Options, Parser, html};
 
 fn dry_run(text: &str, opts: Options, broken_links: &mut Vec<BrokenLink<'static>>) {
     let p = Parser::new_with_broken_link_callback(
@@ -114,6 +114,7 @@ pub fn main() -> std::io::Result<()> {
         "enable-container-extensions",
         "enable container extensions",
     );
+    opts.optflag("", "enable-mark", "enable mark");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -172,6 +173,9 @@ pub fn main() -> std::io::Result<()> {
     }
     if matches.opt_present("enable-container-extensions") {
         opts.insert(Options::ENABLE_CONTAINER_EXTENSIONS);
+    }
+    if matches.opt_present("enable-mark") {
+        opts.insert(Options::ENABLE_MARK);
     }
 
     let mut input = String::new();
