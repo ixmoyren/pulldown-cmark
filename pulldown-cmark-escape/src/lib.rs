@@ -285,8 +285,8 @@ fn escape_html_scalar<W: StrWrite>(
 #[cfg(all(target_arch = "x86_64", feature = "simd"))]
 mod simd {
     use super::StrWrite;
-    use std::arch::x86_64::*;
-    use std::mem::size_of;
+    use core::arch::x86_64::*;
+    use core::mem::size_of;
 
     const VECTOR_SIZE: usize = size_of::<__m128i>();
 
@@ -346,11 +346,11 @@ mod simd {
         debug_assert!(bytes.len() >= offset + VECTOR_SIZE);
 
         let table = create_lookup();
-        let lookup = _mm_loadu_si128(table.as_ptr() as *const __m128i);
-        let raw_ptr = bytes.as_ptr().add(offset) as *const __m128i;
+        let lookup = unsafe { _mm_loadu_si128(table.as_ptr() as *const __m128i) };
+        let raw_ptr = unsafe { bytes.as_ptr().add(offset) as *const __m128i };
 
         // Load the vector from memory.
-        let vector = _mm_loadu_si128(raw_ptr);
+        let vector = unsafe { _mm_loadu_si128(raw_ptr) };
         // We take the least significant 4 bits of every byte and use them as indices
         // to map into the lookup vector.
         // Note that shuffle maps bytes with their most significant bit set to lookup[0].
@@ -395,7 +395,7 @@ mod simd {
         debug_assert!(bytes.len() >= VECTOR_SIZE);
         let upperbound = bytes.len() - VECTOR_SIZE;
         while offset < upperbound {
-            let mut mask = compute_mask(bytes, offset);
+            let mut mask = unsafe { compute_mask(bytes, offset) };
             while mask != 0 {
                 let ix = mask.trailing_zeros();
                 callback(offset + ix as usize)?;
@@ -406,7 +406,7 @@ mod simd {
 
         // Final iteration. We align the read with the end of the slice and
         // shift off the bytes at start we have already scanned.
-        let mut mask = compute_mask(bytes, upperbound);
+        let mut mask = unsafe { compute_mask(bytes, upperbound) };
         mask >>= offset - upperbound;
         while mask != 0 {
             let ix = mask.trailing_zeros();
@@ -424,7 +424,7 @@ mod simd {
             unsafe {
                 super::foreach_special_simd("&aXaaaa.a'aa9a<>aab&".as_bytes(), 0, |ix| {
                     #[allow(clippy::unit_arg)]
-                    Ok::<_, std::fmt::Error>(vec.push(ix))
+                    Ok::<_, core::fmt::Error>(vec.push(ix))
                 })
                 .unwrap();
             }
@@ -441,13 +441,13 @@ mod simd {
                 unsafe {
                     super::foreach_special_simd(&vek, 0, |_| {
                         match_count += 1;
-                        Ok::<_, std::fmt::Error>(())
+                        Ok::<_, core::fmt::Error>(())
                     })
                     .unwrap();
                 }
-                assert!((match_count > 0) == (match_count == super::VECTOR_SIZE));
+                assert_eq!(match_count > 0, match_count == super::VECTOR_SIZE);
                 assert_eq!(
-                    (match_count == super::VECTOR_SIZE),
+                    match_count == super::VECTOR_SIZE,
                     right_byte,
                     "match_count: {}, byte: {:?}",
                     match_count,
