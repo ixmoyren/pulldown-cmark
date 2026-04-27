@@ -1521,6 +1521,7 @@ version = "0.14.0"
 dependencies = [
     "bincode",
     "bitflags",
+    "fearless_simd",
     "getopts",
     "hashbrown 0.17.0",
     "memchr",

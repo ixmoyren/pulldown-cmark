@@ -2522,14 +2522,18 @@ fn delim_run_can_close(
 }
 
 fn create_lut(options: &Options) -> LookupTable {
-    #[cfg(all(target_arch = "x86_64", feature = "simd"))]
+    #[cfg(feature = "simd")]
     {
+        let scalar = special_bytes(options);
+        let (special_list, special_count) = simd::build_special_list(&scalar);
         LookupTable {
-            simd: simd::compute_lookup(options),
-            scalar: special_bytes(options),
+            scalar,
+            special_list,
+            special_count,
+            level: fearless_simd::Level::new(),
         }
     }
-    #[cfg(not(all(target_arch = "x86_64", feature = "simd")))]
+    #[cfg(not(feature = "simd"))]
     {
         special_bytes(options)
     }
@@ -2582,13 +2586,17 @@ enum LoopInstruction<T> {
     BreakAtWith(usize, T),
 }
 
-#[cfg(all(target_arch = "x86_64", feature = "simd"))]
+#[cfg(feature = "simd")]
 struct LookupTable {
-    simd: [u8; 16],
     scalar: [bool; 256],
+    /// Pre-computed list of special byte values for SIMD equality comparison.
+    special_list: [u8; 32],
+    special_count: u8,
+    /// Cached SIMD feature level, used for runtime dispatch.
+    level: fearless_simd::Level,
 }
 
-#[cfg(not(all(target_arch = "x86_64", feature = "simd")))]
+#[cfg(not(feature = "simd"))]
 type LookupTable = [bool; 256];
 
 /// This function walks the byte slices from the given index and
@@ -2610,11 +2618,24 @@ fn iterate_special_bytes<F, T>(
 where
     F: FnMut(usize, u8) -> LoopInstruction<Option<T>>,
 {
-    #[cfg(all(target_arch = "x86_64", feature = "simd"))]
+    #[cfg(feature = "simd")]
     {
-        simd::iterate_special_bytes(lut, bytes, ix, callback)
+        use fearless_simd::dispatch;
+        let special = &lut.special_list[..lut.special_count as usize];
+        if bytes.len() >= simd::VECTOR_SIZE && !special.is_empty() {
+            let level = lut.level;
+            dispatch!(level, simd => simd::simd_iterate_special_bytes(
+                simd,
+                special,
+                bytes,
+                ix,
+                callback
+            ))
+        } else {
+            scalar_iterate_special_bytes(&lut.scalar, bytes, ix, callback)
+        }
     }
-    #[cfg(not(all(target_arch = "x86_64", feature = "simd")))]
+    #[cfg(not(feature = "simd"))]
     {
         scalar_iterate_special_bytes(lut, bytes, ix, callback)
     }
@@ -2756,7 +2777,7 @@ fn parse_inside_attribute_block(inside_attr_block: &str) -> Option<HeadingAttrib
     Some(HeadingAttributes { id, classes, attrs })
 }
 
-#[cfg(all(target_arch = "x86_64", feature = "simd"))]
+#[cfg(feature = "simd")]
 mod simd {
     //! SIMD byte scanning logic.
     //!
@@ -2764,172 +2785,65 @@ mod simd {
     //! provided callback functions on special bytes and their indices using SIMD.
     //! The byteset is defined in `compute_lookup`.
     //!
-    //! The idea is to load in a chunk of 16 bytes and perform a lookup into a set of
-    //! bytes on all the bytes in this chunk simultaneously. We produce a 16 bit bitmask
-    //! from this and call the callback on every index corresponding to a 1 in this mask
-    //! before moving on to the next chunk. This allows us to move quickly when there
-    //! are no or few matches.
+    //! The idea is to load in a chunk of 16 bytes and check each byte against the
+    //! precomputed set of special marker bytes using SIMD equality comparisons.
+    //! We produce a mask from this and call the callback on every index corresponding
+    //! to a match before moving on to the next chunk. This allows us to move quickly
+    //! when there are no or few matches.
     //!
-    //! The table lookup is inspired by this [great overview]. However, since all of the
-    //! bytes we're interested in are ASCII, we don't quite need the full generality of
-    //! the universal algorithm and are hence able to skip a few instructions.
-    //!
-    //! [great overview]: http://0x80.pl/articles/simd-byte-lookup.html
+    //! The portable implementation uses only [`Simd`] trait methods, which allows
+    //! fearless_simd to dispatch to the best available instruction set (SSE4.2, AVX2,
+    //! NEON, WASM SIMD128) at runtime.
 
-    use core::arch::x86_64::*;
+    use fearless_simd::{Simd, SimdBase, mask8x16, u8x16};
 
-    use super::{LookupTable, LoopInstruction};
-    use crate::Options;
+    use super::LoopInstruction;
 
-    const VECTOR_SIZE: usize = core::mem::size_of::<__m128i>();
+    pub(super) const VECTOR_SIZE: usize = 16;
 
-    /// Generates a lookup table containing the bitmaps for our
-    /// special marker bytes. This is effectively a 128 element 2d bitvector,
-    /// that can be indexed by a four bit row index (the lower nibble)
-    /// and a three bit column index (upper nibble).
-    pub(super) fn compute_lookup(options: &Options) -> [u8; 16] {
-        let mut lookup = [0u8; 16];
-        let standard_bytes = [
-            b'\n', b'\r', b'*', b'_', b'&', b'\\', b'[', b']', b'<', b'!', b'`', b'\0',
-        ];
-
-        for &byte in &standard_bytes {
-            add_lookup_byte(&mut lookup, byte);
-        }
-        if options.contains(Options::ENABLE_TABLES) {
-            add_lookup_byte(&mut lookup, b'|');
-        }
-        if options.contains(Options::ENABLE_STRIKETHROUGH)
-            || options.contains(Options::ENABLE_SUBSCRIPT)
-        {
-            add_lookup_byte(&mut lookup, b'~');
-        }
-        if options.contains(Options::ENABLE_MARK) {
-            add_lookup_byte(&mut lookup, b'=');
-        }
-        if options.contains(Options::ENABLE_SUPERSCRIPT) {
-            add_lookup_byte(&mut lookup, b'^');
-        }
-        if options.contains(Options::ENABLE_MATH) {
-            add_lookup_byte(&mut lookup, b'$');
-            add_lookup_byte(&mut lookup, b'{');
-            add_lookup_byte(&mut lookup, b'}');
-        }
-        if options.contains(Options::ENABLE_EMOJI_SHORTCODE) {
-            add_lookup_byte(&mut lookup, b':');
-        }
-        if options.contains(Options::ENABLE_SMART_PUNCTUATION) {
-            for &byte in &[b'.', b'-', b'"', b'\''] {
-                add_lookup_byte(&mut lookup, byte);
+    pub(super) fn build_special_list(scalar: &[bool; 256]) -> ([u8; 32], u8) {
+        let mut list = [0u8; 32];
+        let mut count = 0u8;
+        for (byte_val, &is_special) in scalar.iter().enumerate() {
+            if is_special {
+                list[count as usize] = byte_val as u8;
+                count += 1;
             }
         }
-
-        lookup
+        (list, count)
     }
 
-    fn add_lookup_byte(lookup: &mut [u8; 16], byte: u8) {
-        lookup[(byte & 0x0f) as usize] |= 1 << (byte >> 4);
-    }
-
-    /// Computes a bit mask for the given byteslice starting from the given index,
-    /// where the 16 least significant bits indicate (by value of 1) whether or not
-    /// there is a special character at that byte position. The least significant bit
-    /// corresponds to `bytes[ix]` and the most significant bit corresponds to
-    /// `bytes[ix + 15]`.
-    /// It is only safe to call this function when `bytes.len() >= ix + VECTOR_SIZE`.
-    #[target_feature(enable = "ssse3")]
-    #[inline]
-    unsafe fn compute_mask(lut: &[u8; 16], bytes: &[u8], ix: usize) -> i32 {
-        debug_assert!(bytes.len() >= ix + VECTOR_SIZE);
-
-        let bitmap = _mm_loadu_si128(lut.as_ptr() as *const __m128i);
-        // Small lookup table to compute single bit bitshifts
-        // for 16 bytes at once.
-        let bitmask_lookup =
-            _mm_setr_epi8(1, 2, 4, 8, 16, 32, 64, -128, -1, -1, -1, -1, -1, -1, -1, -1);
-
-        // Load input from memory.
-        let raw_ptr = bytes.as_ptr().add(ix) as *const __m128i;
-        let input = _mm_loadu_si128(raw_ptr);
-        // Compute the bitmap using the bottom nibble as an index
-        // into the lookup table. Note that non-ascii bytes will have
-        // their most significant bit set and will map to lookup[0].
-        let bitset = _mm_shuffle_epi8(bitmap, input);
-        // Compute the high nibbles of the input using a 16-bit rightshift of four
-        // and a mask to prevent most-significant bit issues.
-        let higher_nibbles = _mm_and_si128(_mm_srli_epi16(input, 4), _mm_set1_epi8(0x0f));
-        // Create a bitmask for the bitmap by perform a left shift of the value
-        // of the higher nibble. Bytes with their most significant set are mapped
-        // to -1 (all ones).
-        let bitmask = _mm_shuffle_epi8(bitmask_lookup, higher_nibbles);
-        // Test the bit of the bitmap by AND'ing the bitmap and the mask together.
-        let tmp = _mm_and_si128(bitset, bitmask);
-        // Check whether the result was not null. NEQ is not a SIMD intrinsic,
-        // but comparing to the bitmask is logically equivalent. This also prevents us
-        // from matching any non-ASCII bytes since none of the bitmaps were all ones
-        // (-1).
-        let result = _mm_cmpeq_epi8(tmp, bitmask);
-
-        // Return the resulting bitmask.
-        _mm_movemask_epi8(result)
+    /// Detect which bytes in a 16-byte chunk are special marker bytes.
+    ///
+    /// Compares the chunk against each precomputed special byte value using
+    /// SIMD equality, then combines all results with bitwise OR.
+    /// Returns a mask where each all-ones lane (`-1` as `i8`) indicates a match.
+    /// Uses only [`Simd`] trait methods for portability across architectures.
+    #[inline(always)]
+    fn detect_special_bytes<S: Simd>(simd: S, chunk: u8x16<S>, special: &[u8]) -> mask8x16<S> {
+        if special.is_empty() {
+            return simd.splat_mask8x16(0);
+        }
+        let first = simd.splat_u8x16(special[0]);
+        let mut mask = simd.simd_eq_u8x16(chunk, first);
+        for &byte in &special[1..] {
+            let splat = simd.splat_u8x16(byte);
+            let eq = simd.simd_eq_u8x16(chunk, splat);
+            mask = simd.or_mask8x16(mask, eq);
+        }
+        mask
     }
 
     /// Calls callback on byte indices and their value.
     /// Breaks when callback returns LoopInstruction::BreakAtWith(ix, val). And skips the
     /// number of bytes in callback return value otherwise.
     /// Returns the final index and a possible break value.
-    pub(super) fn iterate_special_bytes<F, T>(
-        lut: &LookupTable,
-        bytes: &[u8],
-        ix: usize,
-        callback: F,
-    ) -> (usize, Option<T>)
-    where
-        F: FnMut(usize, u8) -> LoopInstruction<Option<T>>,
-    {
-        if is_x86_feature_detected!("ssse3") && bytes.len() >= VECTOR_SIZE {
-            unsafe { simd_iterate_special_bytes(&lut.simd, bytes, ix, callback) }
-        } else {
-            super::scalar_iterate_special_bytes(&lut.scalar, bytes, ix, callback)
-        }
-    }
-
-    /// Calls the callback function for every 1 in the given bitmask with
-    /// the index `offset + ix`, where `ix` is the position of the 1 in the mask.
-    /// Returns `Ok(ix)` to continue from index `ix`, `Err((end_ix, opt_val)` to break with
-    /// final index `end_ix` and optional value `opt_val`.
-    unsafe fn process_mask<F, T>(
-        mut mask: i32,
-        bytes: &[u8],
-        mut offset: usize,
-        callback: &mut F,
-    ) -> Result<usize, (usize, Option<T>)>
-    where
-        F: FnMut(usize, u8) -> LoopInstruction<Option<T>>,
-    {
-        while mask != 0 {
-            let mask_ix = mask.trailing_zeros() as usize;
-            offset += mask_ix;
-            match callback(offset, *bytes.get_unchecked(offset)) {
-                LoopInstruction::ContinueAndSkip(skip) => {
-                    offset += skip + 1;
-                    let shift = skip + 1 + mask_ix;
-                    if shift >= 32 {
-                        break;
-                    }
-                    mask >>= shift;
-                }
-                LoopInstruction::BreakAtWith(ix, val) => return Err((ix, val)),
-            }
-        }
-        Ok(offset)
-    }
-
-    #[target_feature(enable = "ssse3")]
-    /// Important: only call this function when `bytes.len() >= 16`. Doing
-    /// so otherwise may exhibit undefined behaviour.
-    unsafe fn simd_iterate_special_bytes<F, T>(
-        lut: &[u8; 16],
+    ///
+    /// Uses [`dispatch!`] to select the best SIMD implementation at runtime.
+    #[inline(always)]
+    pub(super) fn simd_iterate_special_bytes<S: Simd, F, T>(
+        simd: S,
+        special: &[u8],
         bytes: &[u8],
         mut ix: usize,
         mut callback: F,
@@ -2937,23 +2851,61 @@ mod simd {
     where
         F: FnMut(usize, u8) -> LoopInstruction<Option<T>>,
     {
-        debug_assert!(bytes.len() >= VECTOR_SIZE);
         let upperbound = bytes.len() - VECTOR_SIZE;
 
         while ix < upperbound {
-            let mask = compute_mask(lut, bytes, ix);
-            let block_start = ix;
-            ix = match process_mask(mask, bytes, ix, &mut callback) {
-                Ok(ix) => core::cmp::max(ix, VECTOR_SIZE + block_start),
-                Err((end_ix, val)) => return (end_ix, val),
-            };
+            let chunk = u8x16::from_slice(simd, &bytes[ix..ix + VECTOR_SIZE]);
+            let mask = detect_special_bytes(simd, chunk, special);
+            let mask_arr: &[i8; 16] = simd.as_array_ref_mask8x16(&mask);
+
+            let chunk_base = ix;
+            let mut i = 0;
+            while i < 16 {
+                if mask_arr[i] == -1 {
+                    match callback(chunk_base + i, bytes[chunk_base + i]) {
+                        LoopInstruction::ContinueAndSkip(skip) => {
+                            i += skip + 1;
+                            if i >= 16 {
+                                break;
+                            }
+                            continue;
+                        }
+                        LoopInstruction::BreakAtWith(end_ix, val) => {
+                            return (end_ix, val);
+                        }
+                    }
+                }
+                i += 1;
+            }
+            // Advance to at least the end of the current chunk,
+            // further if a ContinueAndSkip skipped past it.
+            ix = core::cmp::max(chunk_base + i, chunk_base + VECTOR_SIZE);
         }
 
+        // Final iteration. We align the read with the end of the slice and
+        // shift off the bytes at start we have already scanned.
         if bytes.len() > ix {
-            // shift off the bytes at start we have already scanned
-            let mask = compute_mask(lut, bytes, upperbound) >> ix - upperbound;
-            if let Err((end_ix, val)) = process_mask(mask, bytes, ix, &mut callback) {
-                return (end_ix, val);
+            let tail_vec = u8x16::from_slice(simd, &bytes[upperbound..]);
+            let mask = detect_special_bytes(simd, tail_vec, special);
+            let mask_arr: &[i8; 16] = simd.as_array_ref_mask8x16(&mask);
+            let skip = ix - upperbound;
+            let mut i = skip;
+            while i < 16 {
+                if mask_arr[i] == -1 {
+                    match callback(upperbound + i, bytes[upperbound + i]) {
+                        LoopInstruction::ContinueAndSkip(skip_n) => {
+                            i += skip_n + 1;
+                            if i >= 16 {
+                                break;
+                            }
+                            continue;
+                        }
+                        LoopInstruction::BreakAtWith(end_ix, val) => {
+                            return (end_ix, val);
+                        }
+                    }
+                }
+                i += 1;
             }
         }
 
@@ -2962,8 +2914,8 @@ mod simd {
 
     #[cfg(test)]
     mod simd_test {
-        use super::{super::create_lut, LoopInstruction, iterate_special_bytes};
         use crate::Options;
+        use crate::firstpass::{LoopInstruction, create_lut, iterate_special_bytes};
 
         fn check_expected_indices(bytes: &[u8], expected: &[usize], skip: usize) {
             let mut opts = Options::empty();
