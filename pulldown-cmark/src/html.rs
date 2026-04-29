@@ -119,7 +119,9 @@ where
                     self.write("</code>")?;
                 }
                 EmojiShortcode(short_code) => {
+                    self.write(r#"<span class="emoji-shortcode">"#)?;
                     escape_html(&mut self.writer, &short_code)?;
+                    self.write(r#"</span>"#)?;
                 }
                 InlineMath(text) => {
                     self.write(r#"<span class="math math-inline">"#)?;

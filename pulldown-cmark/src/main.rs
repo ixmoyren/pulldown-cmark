@@ -115,6 +115,7 @@ pub fn main() -> std::io::Result<()> {
         "enable container extensions",
     );
     opts.optflag("", "enable-mark", "enable mark");
+    opts.optflag("", "enable-emoji-shortcode", "enable emoji shortcode");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -176,6 +177,9 @@ pub fn main() -> std::io::Result<()> {
     }
     if matches.opt_present("enable-mark") {
         opts.insert(Options::ENABLE_MARK);
+    }
+    if matches.opt_present("enable-emoji-shortcode") {
+        opts.insert(Options::ENABLE_EMOJI_SHORTCODE);
     }
 
     let mut input = String::new();

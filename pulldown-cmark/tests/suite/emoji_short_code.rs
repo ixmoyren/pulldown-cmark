@@ -5,10 +5,10 @@ use super::{default_test_opts, test_markdown_html};
 use pulldown_cmark::Options;
 
 #[test]
-fn mark_test_1() {
+fn emoji_short_code_test_1() {
     let original = r##":smile:
 "##;
-    let expected = r##"<p>smile</p>
+    let expected = r##"<p><span class="emoji-shortcode">smile</span></p>
 "##;
 
     let mut opts = default_test_opts();
